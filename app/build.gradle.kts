@@ -71,4 +71,7 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.6.4")
 
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.0")
+
+    implementation("com.google.firebase:firebase-database-ktx:20.3.0")
+    implementation("androidx.activity:activity-compose:1.8.2")
 }

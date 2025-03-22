@@ -2,6 +2,7 @@ package com.example.todolist.layout
 
 import android.app.TimePickerDialog
 import android.widget.TimePicker
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -18,6 +19,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.draw.clip
 import androidx.navigation.NavHostController
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.FirebaseDatabase
 import java.util.*
 
@@ -27,6 +29,7 @@ fun TaskCreateScreen(navController: NavHostController) {
     var taskType by remember { mutableStateOf("") }
     var taskDescription by remember { mutableStateOf("") }
     var selectedTime by remember { mutableStateOf("⌛Select Time") }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
 
     val context = LocalContext.current
     val calendar = Calendar.getInstance()
@@ -40,9 +43,22 @@ fun TaskCreateScreen(navController: NavHostController) {
         false
     )
 
-    // Firebase setup
-    val userId = "NSb9DNcxoSgX3LcDpkdtNXBp8CA2" // Should match HomeScreen
+    // Get the authenticated user's ID
+    val userId = FirebaseAuth.getInstance().currentUser?.uid ?: run {
+        LaunchedEffect(Unit) {
+            errorMessage = "You must be logged in to create a task"
+            navController.navigate("login") // Redirect to login if not authenticated
+        }
+        return
+    }
     val databaseRef = FirebaseDatabase.getInstance().getReference("users/$userId/tasks")
+
+    LaunchedEffect(errorMessage) {
+        errorMessage?.let {
+            Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
+            errorMessage = null
+        }
+    }
 
     Box(
         modifier = Modifier
@@ -126,30 +142,38 @@ fun TaskCreateScreen(navController: NavHostController) {
 
             Button(
                 onClick = {
-                    // Create new task and save to Firebase
-                    if (taskName.isNotBlank() && taskType.isNotBlank() && selectedTime != "⌛Select Time") {
-                        val newTask = Task(
-                            check = false,
-                            taskName = taskName,
-                            time = selectedTime,
-                            type = taskType,
-                            description = taskDescription
-                        )
+                    println("Create button clicked")
+                    when {
+                        taskName.isBlank() -> errorMessage = "Task Name is required"
+                        taskType.isBlank() -> errorMessage = "Task Type is required"
+                        selectedTime == "⌛Select Time" -> errorMessage = "Please select a time"
+                        else -> {
+                            val newTask = Task(
+                                check = false,
+                                taskName = taskName,
+                                time = selectedTime,
+                                type = taskType,
+                                description = taskDescription
+                            )
+                            val newTaskRef = databaseRef.push()
+                            newTask.id = newTaskRef.key ?: ""
+                            println("Saving task with ID: ${newTask.id} for user: $userId")
 
-                        // Push new task to Firebase (creates new node with auto-generated ID)
-                        databaseRef.push().setValue(newTask)
-                            .addOnSuccessListener {
-                                // Clear fields and navigate back on success
-                                taskName = ""
-                                taskType = ""
-                                taskDescription = ""
-                                selectedTime = "⌛Select Time"
-                                navController.navigate("home")
-                            }
-                            .addOnFailureListener { e ->
-                                // Handle error (could add a snackbar/toast here)
-                                println("Failed to create task: ${e.message}")
-                            }
+                            newTaskRef.setValue(newTask)
+                                .addOnSuccessListener {
+                                    println("Task saved successfully")
+                                    errorMessage = "Task created successfully"
+                                    taskName = ""
+                                    taskType = ""
+                                    taskDescription = ""
+                                    selectedTime = "⌛Select Time"
+                                    navController.navigate("home")
+                                }
+                                .addOnFailureListener { e ->
+                                    println("Failed to create task: ${e.message}")
+                                    errorMessage = "Failed to create task: ${e.message}"
+                                }
+                        }
                     }
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = Color.Black),

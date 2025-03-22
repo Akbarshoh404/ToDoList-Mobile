@@ -8,9 +8,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.ui.Modifier
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.example.todolist.layout.HomeScreen
 import com.example.todolist.layout.LoginScreen
 import com.example.todolist.layout.TaskCreateScreen
@@ -40,22 +42,24 @@ class MainActivity : ComponentActivity() {
                             TaskCreateScreen(navController)
                         }
                         composable(
-                            route = "taskDetail/{check}/{taskName}/{time}/{type}/{description}/{taskIndex}"
+                            route = "taskDetail/{check}/{taskName}/{time}/{type}/{description}/{taskId}",
+                            arguments = listOf(
+                                navArgument("check") { type = NavType.BoolType },
+                                navArgument("taskName") { type = NavType.StringType },
+                                navArgument("time") { type = NavType.StringType },
+                                navArgument("type") { type = NavType.StringType },
+                                navArgument("description") { type = NavType.StringType },
+                                navArgument("taskId") { type = NavType.StringType }
+                            )
                         ) { backStackEntry ->
-                            val check = backStackEntry.arguments?.getString("check")?.toBoolean() ?: false
-                            val taskName = backStackEntry.arguments?.getString("taskName") ?: ""
-                            val time = backStackEntry.arguments?.getString("time") ?: ""
-                            val type = backStackEntry.arguments?.getString("type") ?: ""
-                            val description = backStackEntry.arguments?.getString("description") ?: ""
-                            val taskIndex = backStackEntry.arguments?.getString("taskIndex")?.toIntOrNull() ?: -1
                             TaskDetailScreen(
                                 navController = navController,
-                                check = check,
-                                taskName = taskName,
-                                time = time,
-                                type = type,
-                                description = description,
-                                taskIndex = taskIndex
+                                check = backStackEntry.arguments?.getBoolean("check") ?: false,
+                                taskName = backStackEntry.arguments?.getString("taskName") ?: "",
+                                time = backStackEntry.arguments?.getString("time") ?: "",
+                                type = backStackEntry.arguments?.getString("type") ?: "",
+                                description = backStackEntry.arguments?.getString("description") ?: "",
+                                taskId = backStackEntry.arguments?.getString("taskId") ?: ""
                             )
                         }
                     }

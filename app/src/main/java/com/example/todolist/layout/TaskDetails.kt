@@ -14,6 +14,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.FirebaseDatabase
 import java.net.URLDecoder
 
@@ -25,19 +26,25 @@ fun TaskDetailScreen(
     time: String,
     type: String,
     description: String,
-    taskIndex: Int = -1 // Add taskIndex as an optional parameter to update Firebase
+    taskId: String
 ) {
-    // Decode the URL-encoded strings
     val decodedTaskName = URLDecoder.decode(taskName, "UTF-8")
     val decodedTime = URLDecoder.decode(time, "UTF-8")
     val decodedType = URLDecoder.decode(type, "UTF-8")
     val decodedDescription = URLDecoder.decode(description, "UTF-8")
+    val decodedTaskId = URLDecoder.decode(taskId, "UTF-8")
 
-    // Local state for check status
     var isChecked by remember { mutableStateOf(check) }
 
-    // Firebase reference
-    val userId = "NSb9DNcxoSgX3LcDpkdtNXBp8CA2" // Match with HomeScreen
+    val auth = FirebaseAuth.getInstance()
+    val currentUser = auth.currentUser
+    val userId = currentUser?.uid ?: run {
+        LaunchedEffect(Unit) {
+            navController.popBackStack()
+        }
+        return
+    }
+
     val databaseRef = FirebaseDatabase.getInstance().getReference("users/$userId/tasks")
 
     Box(
@@ -115,8 +122,10 @@ fun TaskDetailScreen(
             Button(
                 onClick = {
                     isChecked = !isChecked
-                    if (taskIndex != -1) {
-                        databaseRef.child(taskIndex.toString()).child("check").setValue(isChecked)
+                    if (decodedTaskId.isNotEmpty()) {
+                        databaseRef.child(decodedTaskId).child("check").setValue(isChecked)
+                            .addOnSuccessListener { println("Status updated successfully") }
+                            .addOnFailureListener { e -> println("Failed to update status: ${e.message}") }
                     }
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = Color.Black),
@@ -133,17 +142,22 @@ fun TaskDetailScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Delete Button
             Button(
                 onClick = {
-                    if (taskIndex != -1) {
-                        databaseRef.child(taskIndex.toString()).removeValue()
+                    if (decodedTaskId.isNotEmpty()) {
+                        databaseRef.child(decodedTaskId).removeValue()
                             .addOnSuccessListener {
+                                println("Task deleted successfully with ID: $decodedTaskId")
                                 navController.popBackStack()
                             }
+                            .addOnFailureListener { exception ->
+                                println("Failed to delete task: ${exception.message}")
+                            }
+                    } else {
+                        println("Invalid task ID: $decodedTaskId")
                     }
                 },
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD32F2F)), // Red color for delete
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD32F2F)),
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(8.dp))
@@ -153,7 +167,6 @@ fun TaskDetailScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Back Button
             Button(
                 onClick = { navController.popBackStack() },
                 colors = ButtonDefaults.buttonColors(containerColor = Color.Black),

@@ -29,7 +29,10 @@ import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.android.gms.common.api.ApiException
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.GoogleAuthProvider
+import com.google.firebase.database.DataSnapshot
+import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.FirebaseDatabase
+import com.google.firebase.database.ValueEventListener
 
 @Composable
 fun LoginScreen(navController: NavHostController) {
@@ -53,7 +56,6 @@ fun LoginScreen(navController: NavHostController) {
         }
     }
 
-    // Animation setup
     val infiniteTransition = rememberInfiniteTransition()
     val scale by infiniteTransition.animateFloat(
         initialValue = 1f,
@@ -82,13 +84,12 @@ fun LoginScreen(navController: NavHostController) {
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(bottom = 24.dp)
-                .scale(scale), // Apply the animation scale
+                .scale(scale),
             textAlign = TextAlign.Center
         )
 
         OutlinedButton(
             onClick = {
-                // Sign out first to force account selection
                 googleSignInClient.signOut().addOnCompleteListener {
                     launcher.launch(googleSignInClient.signInIntent)
                 }
@@ -112,8 +113,15 @@ fun LoginScreen(navController: NavHostController) {
     }
 }
 
-var taskList = mutableListOf(
-    Task(time = "09:30 AM", taskName = "Test Task", type = "Test", check = false, description = "test"),
+private val defaultTaskList = listOf(
+    Task(
+        id = "",
+        time = "09:30 AM",
+        taskName = "Test Task",
+        type = "Test",
+        check = false,
+        description = "test"
+    )
 )
 
 private fun firebaseAuthWithGoogle(
@@ -130,11 +138,36 @@ private fun firebaseAuthWithGoogle(
                 val user = auth.currentUser
                 user?.let {
                     val userIdReference = database.reference.child("users").child(it.uid)
-                    userIdReference.setValue(
-                        UserData(it.displayName ?: "", it.email ?: "", it.photoUrl.toString(), it.uid, taskList)
-                    ).addOnCompleteListener {
-                        navController.navigate("home")
-                    }
+
+                    userIdReference.addListenerForSingleValueEvent(object : ValueEventListener {
+                        override fun onDataChange(snapshot: DataSnapshot) {
+                            if (!snapshot.exists()) {
+                                val userData = UserData(
+                                    fullName = it.displayName ?: "",
+                                    email = it.email ?: "",
+                                    photoUrl = it.photoUrl?.toString() ?: "",
+                                    uid = it.uid,
+                                    tasks = defaultTaskList
+                                )
+                                userIdReference.setValue(userData)
+                                    .addOnCompleteListener { setValueTask ->
+                                        if (setValueTask.isSuccessful) {
+                                            Log.i("FirebaseAuth", "User data initialized for new user")
+                                            navController.navigate("home")
+                                        } else {
+                                            Log.e("FirebaseAuth", "Failed to save user data", setValueTask.exception)
+                                        }
+                                    }
+                            } else {
+                                Log.i("FirebaseAuth", "Existing user detected, preserving tasks")
+                                navController.navigate("home")
+                            }
+                        }
+
+                        override fun onCancelled(error: DatabaseError) {
+                            Log.e("FirebaseAuth", "Database error: ${error.message}")
+                        }
+                    })
                 }
             } else {
                 Log.e("FirebaseAuth", "Google sign-in failed", task.exception)

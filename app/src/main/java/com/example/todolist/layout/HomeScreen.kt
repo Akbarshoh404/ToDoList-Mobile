@@ -1,9 +1,5 @@
 package com.example.todolist.layout
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -32,11 +28,10 @@ import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.database.ValueEventListener
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import java.net.URLEncoder
 
 data class Task(
+    var id: String = "",
     var check: Boolean = false,
     val taskName: String = "",
     val time: String = "",
@@ -50,11 +45,14 @@ fun HomeScreen(navController: NavController) {
     var selectedSort by remember { mutableStateOf("All") }
     var tasks by remember { mutableStateOf(listOf<Task>()) }
     var taskTypes by remember { mutableStateOf(listOf<String>()) }
-    val coroutineScope = rememberCoroutineScope()
 
-    val auth = FirebaseAuth.getInstance()
-    val currentUser = auth.currentUser
-    val userId = currentUser?.uid ?: return
+    val userId = FirebaseAuth.getInstance().currentUser?.uid ?: run {
+        LaunchedEffect(Unit) {
+//            errorMessage = "You must be logged in to create a task"
+            navController.navigate("login")
+        }
+        return
+    }
 
     val databaseRef = FirebaseDatabase.getInstance().getReference("users/$userId/tasks")
 
@@ -64,8 +62,8 @@ fun HomeScreen(navController: NavController) {
                 val taskList = mutableListOf<Task>()
                 val typesSet = mutableSetOf<String>()
 
-                snapshot.children.forEachIndexed { index, taskSnapshot ->
-                    val task = taskSnapshot.getValue(Task::class.java)
+                snapshot.children.forEach { taskSnapshot ->
+                    val task = taskSnapshot.getValue(Task::class.java)?.copy(id = taskSnapshot.key ?: "")
                     task?.let {
                         taskList.add(it)
                         typesSet.add(it.type)
@@ -85,12 +83,10 @@ fun HomeScreen(navController: NavController) {
     val filteredTasks = remember(searchQuery, selectedSort, tasks) {
         tasks.filter {
             when (selectedSort) {
-                "All" -> !it.check &&
-                        (searchQuery.isBlank() || it.taskName.contains(searchQuery, ignoreCase = true))
-                "Done" -> it.check &&
-                        (searchQuery.isBlank() || it.taskName.contains(searchQuery, ignoreCase = true))
-                else -> it.type == selectedSort &&
-                        (searchQuery.isBlank() || it.taskName.contains(searchQuery, ignoreCase = true))
+                "All" -> searchQuery.isBlank() || it.taskName.contains(searchQuery, ignoreCase = true)
+                "Done" -> it.check && (searchQuery.isBlank() || it.taskName.contains(searchQuery, ignoreCase = true))
+                "Pending" -> !it.check && (searchQuery.isBlank() || it.taskName.contains(searchQuery, ignoreCase = true))
+                else -> it.type == selectedSort && (searchQuery.isBlank() || it.taskName.contains(searchQuery, ignoreCase = true))
             }
         }
     }
@@ -164,11 +160,19 @@ fun HomeScreen(navController: NavController) {
                 .padding(bottom = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            items(listOf("All", "Done")) { option ->
+            items(listOf("All", "Done", "Pending")) { option ->
+                val activeColor = when (option) {
+                    "All" -> Color(0xFF2196F3)
+                    "Done" -> Color(0xFF4CAF50)
+                    "Pending" -> Color(0xFFFF9800)
+                    else -> Color.Black
+                }
+                val inactiveColor = Color(0xFFB0BEC5)
+
                 Button(
                     onClick = { selectedSort = option },
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = if (selectedSort == option) Color.Black else Color.Gray
+                        containerColor = if (selectedSort == option) activeColor else inactiveColor
                     ),
                     modifier = Modifier.clip(RoundedCornerShape(8.dp))
                 ) {
@@ -180,7 +184,7 @@ fun HomeScreen(navController: NavController) {
                 Button(
                     onClick = { selectedSort = type },
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = if (selectedSort == type) Color.Black else Color.Gray
+                        containerColor = if (selectedSort == type) Color(0xFF9C27B0) else Color(0xFFB0BEC5) // Purple for types, gray when inactive
                     ),
                     modifier = Modifier.clip(RoundedCornerShape(8.dp))
                 ) {
@@ -193,74 +197,49 @@ fun HomeScreen(navController: NavController) {
             modifier = Modifier.fillMaxSize(),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            items(filteredTasks, key = { it.taskName + it.time }) { task ->
-                var isVisible by remember { mutableStateOf(!task.check) }
-
-                AnimatedVisibility(
-                    visible = isVisible,
-                    exit = fadeOut(animationSpec = tween(durationMillis = 500)) +
-                            slideOutVertically(
-                                animationSpec = tween(durationMillis = 500),
-                                targetOffsetY = { -it } // Slide up
-                            )
+            items(filteredTasks, key = { it.id }) { task ->
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            val encodedTaskName = URLEncoder.encode(task.taskName, "UTF-8")
+                            val encodedTime = URLEncoder.encode(task.time, "UTF-8")
+                            val encodedType = URLEncoder.encode(task.type, "UTF-8")
+                            val encodedDescription = URLEncoder.encode(task.description, "UTF-8")
+                            val encodedId = URLEncoder.encode(task.id, "UTF-8")
+                            val route = "taskDetail/${task.check}/$encodedTaskName/$encodedTime/$encodedType/$encodedDescription/$encodedId"
+                            navController.navigate(route)
+                        },
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    shape = RoundedCornerShape(8.dp)
                 ) {
-                    Card(
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable {
-                                val taskIndex = tasks.indexOf(task)
-                                val encodedTaskName = URLEncoder.encode(task.taskName, "UTF-8")
-                                val encodedTime = URLEncoder.encode(task.time, "UTF-8")
-                                val encodedType = URLEncoder.encode(task.type, "UTF-8")
-                                val encodedDescription = URLEncoder.encode(task.description, "UTF-8")
-                                val route = "taskDetail/${task.check}/$encodedTaskName/$encodedTime/$encodedType/$encodedDescription/$taskIndex"
-                                navController.navigate(route)
-                            },
-                        colors = CardDefaults.cardColors(containerColor = Color.White),
-                        shape = RoundedCornerShape(8.dp)
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(16.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = task.taskName,
-                                    fontSize = 18.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = Color.Black
-                                )
-                                Text(
-                                    text = task.time,
-                                    fontSize = 14.sp,
-                                    color = Color.Gray
-                                )
-                            }
-                            Checkbox(
-                                checked = task.check,
-                                onCheckedChange = { newValue ->
-                                    val taskIndex = tasks.indexOf(task)
-                                    if (taskIndex != -1) {
-                                        if (newValue) {
-                                            coroutineScope.launch {
-                                                databaseRef.child(taskIndex.toString())
-                                                    .child("check")
-                                                    .setValue(true)
-                                                delay(500)
-                                                isVisible = false
-                                            }
-                                        } else {
-                                            databaseRef.child(taskIndex.toString())
-                                                .child("check")
-                                                .setValue(false)
-                                            isVisible = true
-                                        }
-                                    }
-                                }
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = task.taskName,
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = Color.Black
+                            )
+                            Text(
+                                text = task.time,
+                                fontSize = 14.sp,
+                                color = Color.Gray
                             )
                         }
+                        Checkbox(
+                            checked = task.check,
+                            onCheckedChange = { newValue ->
+                                databaseRef.child(task.id)
+                                    .child("check")
+                                    .setValue(newValue)
+                            }
+                        )
                     }
                 }
             }

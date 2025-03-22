@@ -5,13 +5,14 @@ data class UserData(
     val email: String,
     val photoUrl: String,
     val uid: String,
-    val tasks: List<Task> = emptyList() // Default to an empty list
+    val tasks: List<Task> = emptyList()
 )
 
 data class Task(
-    var time: String,
-    var taskName: String,
-    var type: String,
-    var check: Boolean,
-    var description: String
+    var id: String = "",
+    var time: String = "",
+    var taskName: String = "",
+    var type: String = "",
+    var check: Boolean = false,
+    var description: String = ""
 )
